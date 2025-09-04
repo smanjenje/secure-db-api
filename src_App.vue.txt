@@ -1,0 +1,184 @@
+<template>
+  <div class="max-w-xl mx-auto p-8">
+    <h2 class="text-2xl font-bold mb-6 text-blue-700">Secure DB API - Cliente Vue</h2>
+
+    <div v-if="!user">
+      <div class="mb-8">
+        <h3 class="font-semibold mb-2">Registrar</h3>
+        <input class="input" placeholder="Username" v-model="register.username" />
+        <input class="input" placeholder="Password" type="password" v-model="register.password" />
+        <input class="input" placeholder="DB Password" type="password" v-model="register.dbpassword" />
+        <button class="btn" @click="handleRegister">Registrar</button>
+      </div>
+
+      <div>
+        <h3 class="font-semibold mb-2">Login</h3>
+        <input class="input" placeholder="Username" v-model="auth.username" />
+        <input class="input" placeholder="Password" type="password" v-model="auth.password" />
+        <button class="btn" @click="handleLogin">Login</button>
+      </div>
+    </div>
+
+    <div v-else>
+      <h3 class="font-semibold mb-2">Bem-vindo, {{ user.username }}</h3>
+      <button class="btn mb-4" @click="logout">Logout</button>
+
+      <div class="mb-4">
+        <h4 class="font-semibold mb-2">Criar novo DB</h4>
+        <input class="input" placeholder="Nome do DB" v-model="dbName" />
+        <button class="btn" @click="createDb">Criar DB</button>
+      </div>
+
+      <div class="mb-4">
+        <h4 class="font-semibold mb-2">Meus DBs</h4>
+        <ul>
+          <li v-for="db in dbs" :key="db">
+            <button class="btn btn-sm" @click="readDb(db)">{{ db }}</button>
+          </li>
+        </ul>
+      </div>
+
+      <div v-if="selectedDb" class="mb-4">
+        <h4 class="font-semibold mb-2">DB: {{ selectedDb }}</h4>
+        <textarea rows="8" class="input w-full" v-model="dbData" />
+        <div class="flex gap-2 mt-2">
+          <button class="btn" @click="saveDb">Salvar</button>
+          <button class="btn btn-danger" @click="deleteDb">Deletar</button>
+        </div>
+      </div>
+
+      <div>
+        <h4 class="font-semibold mb-2">Logs</h4>
+        <ul class="text-xs">
+          <li v-for="(log, i) in logs" :key="i">
+            {{ log.timestamp }} | {{ log.operation }} | {{ log.target }} | {{ log.status }}
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+
+const API_URL = 'http://localhost:5000/api';
+
+const user = ref(null);
+const auth = ref({ username: '', password: '' });
+const register = ref({ username: '', password: '', dbpassword: '' });
+const dbName = ref('');
+const dbs = ref([]);
+const dbData = ref('');
+const selectedDb = ref('');
+const logs = ref([]);
+
+// Criar usuário
+const handleRegister = async () => {
+  try {
+    await fetch(`${API_URL}/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(register.value)
+    });
+    alert('Usuário criado!');
+  } catch (e) {
+    alert('Erro: ' + e.message);
+  }
+};
+
+// Login
+const handleLogin = async () => {
+  try {
+    const res = await fetch(`${API_URL}/auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(auth.value)
+    });
+    const data = await res.json();
+    if (data.user) {
+      user.value = data.user;
+      loadDbs(data.user.username);
+      loadLogs(data.user.username);
+    } else {
+      alert(data.error);
+    }
+  } catch (e) {
+    alert('Erro: ' + e.message);
+  }
+};
+
+const logout = () => {
+  user.value = null;
+  dbs.value = [];
+  dbData.value = '';
+  selectedDb.value = '';
+  logs.value = [];
+};
+
+// Criar DB
+const createDb = async () => {
+  await fetch(`${API_URL}/db`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: user.value.username, dbName: dbName.value, data: {} })
+  });
+  loadDbs(user.value.username);
+  dbName.value = '';
+};
+
+// Listar DBs
+const loadDbs = async (username) => {
+  const res = await fetch(`${API_URL}/dbs/${username}`);
+  const data = await res.json();
+  dbs.value = data.dbs;
+};
+
+// Ler DB
+const readDb = async (db) => {
+  selectedDb.value = db;
+  const res = await fetch(`${API_URL}/db/${user.value.username}/${db}`);
+  const data = await res.json();
+  dbData.value = JSON.stringify(data.data, null, 2);
+};
+
+// Salvar DB
+const saveDb = async () => {
+  await fetch(`${API_URL}/db/${user.value.username}/${selectedDb.value}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: JSON.parse(dbData.value) })
+  });
+  alert('DB salvo!');
+};
+
+// Deletar DB
+const deleteDb = async () => {
+  await fetch(`${API_URL}/db/${user.value.username}/${selectedDb.value}`, { method: 'DELETE' });
+  dbData.value = '';
+  selectedDb.value = '';
+  loadDbs(user.value.username);
+};
+
+// Logs
+const loadLogs = async (username) => {
+  const res = await fetch(`${API_URL}/logs?username=${username}`);
+  const data = await res.json();
+  logs.value = data.logs;
+};
+</script>
+
+<style>
+.input {
+  @apply border rounded p-2 mb-2 w-full;
+}
+.btn {
+  @apply bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 mr-2;
+}
+.btn-sm {
+  @apply px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 rounded mr-1;
+}
+.btn-danger {
+  @apply bg-red-600 hover:bg-red-700 text-white;
+}
+</style>
